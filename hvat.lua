@@ -1,7 +1,7 @@
 -- injector.lua — тихий MITM для исполнителя (вставлять ПЕРЕД запуском скрипта)
 -- 1. Ловит момент отправки (syn.request / http_request / request / game:HttpGet)
 -- 2. Пишет Url/Headers/Body в файл, добавляет НЕВИДИМУЮ метку (свой заголовок X-Tap)
--- 4. Отправляет ДАЛЬШЕ НА НАСТОЯЩИЙ сервер (не фейк), ответ отдает скрипту как был
+-- 3. Отправляет ДАЛЬШЕ НА НАСТОЯЩИЙ сервер (не фейк), ответ отдает скрипту как был
 -- Сигнатура X-Pulse-Sig не ломается: она покрывает только Method/path/TS/Nonce/HWID/Env/Body,
 -- наш заголовок X-Tap в подпись не входит, сервер его игнорирует, скрипт его не видит.
 local TAG = "tap-" .. tostring(math.random(100000, 999999))
@@ -93,6 +93,20 @@ if hookfunction then
       if type(self) == "string" then url = self end
       log("[TAP] game:HttpGet Url=" .. tostring(url))
       return old(self, url, ...)
+    end
+  end)
+  -- HttpService методы (если чит шлет через Roblox, а не executor)
+  pcall(function()
+    local hs = game:GetService("HttpService")
+    for _, m in ipairs({ "PostAsync", "GetAsync", "RequestAsync" }) do
+      local ok, old = pcall(function() return hs[m] end)
+      if ok and type(old) == "function" then
+        hs[m] = function(self, ...)
+          local args = { ... }
+          log("[TAP] HttpService:" .. m .. " " .. dump(args):sub(1, 1000))
+          return old(self, ...)
+        end
+      end
     end
   end)
   log("[TAP] armed, tag=" .. TAG .. " dir=" .. DUMP_DIR)
