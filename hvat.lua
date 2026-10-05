@@ -1,7 +1,7 @@
 -- injector.lua — тихий MITM для исполнителя (вставлять ПЕРЕД запуском скрипта)
 -- 1. Ловит момент отправки (syn.request / http_request / request / game:HttpGet)
 -- 2. Пишет Url/Headers/Body в файл, добавляет НЕВИДИМУЮ метку (свой заголовок X-Tap)
--- 3. Отправляет ДАЛЬШЕ НА НАСТОЯЩИЙ сервер (не фейк), ответ отдает скрипту как был
+-- 4. Отправляет ДАЛЬШЕ НА НАСТОЯЩИЙ сервер (не фейк), ответ отдает скрипту как был
 -- Сигнатура X-Pulse-Sig не ломается: она покрывает только Method/path/TS/Nonce/HWID/Env/Body,
 -- наш заголовок X-Tap в подпись не входит, сервер его игнорирует, скрипт его не видит.
 local TAG = "tap-" .. tostring(math.random(100000, 999999))
@@ -85,14 +85,16 @@ if hookfunction then
     local old = request
     request = wrap("request", old)
   end
-  -- game:HttpGet для иконок/шрифтов
-  if game and game.HttpGet then
+  -- game:HttpGet для иконок/шрифтов (доступ через pcall: в части сред его нет в DataModel)
+  pcall(function()
     local old = game.HttpGet
+    if type(old) ~= "function" then return end
     game.HttpGet = function(self, url, ...)
+      if type(self) == "string" then url = self end
       log("[TAP] game:HttpGet Url=" .. tostring(url))
       return old(self, url, ...)
     end
-  end
+  end)
   log("[TAP] armed, tag=" .. TAG .. " dir=" .. DUMP_DIR)
 else
   log("[TAP] no hookfunction (sandbox mode), idle")
